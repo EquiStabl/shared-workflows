@@ -1,0 +1,60 @@
+name: Nx CI
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: 'Node.js version'
+        type: string
+        default: '20'
+      nx_targets:
+        description: 'Nx targets to run (space-separated)'
+        type: string
+        default: 'lint test build'
+      prisma:
+        description: 'Run prisma generate before targets'
+        type: boolean
+        default: false
+      env_file:
+        description: 'Content to write to .env file'
+        type: string
+        default: ''
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          filter: tree:0
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Create env file
+        if: inputs.env_file != ''
+        env:
+          ENV_CONTENT: ${{ inputs.env_file }}
+        run: echo "$ENV_CONTENT" >> .env
+
+      - name: Generate Prisma Client
+        if: inputs.prisma
+        run: npx prisma generate
+
+      - name: Run Nx targets
+        run: npx nx run-many -t ${{ inputs.nx_targets }}
+        env:
+          NX_CLOUD_ACCESS_TOKEN: ${{ secrets.NX_CLOUD_ACCESS_TOKEN }}
+
+      - name: Nx fix-ci
+        run: npx nx fix-ci
+        if: always()

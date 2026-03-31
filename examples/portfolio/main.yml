@@ -1,0 +1,39 @@
+# Portfolio — Node 20, Prisma, 3 images (api + studio + client)
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  packages: write
+
+jobs:
+  ci:
+    uses: <owner>/shared-workflows/.github/workflows/nx-ci.yml@main
+    with:
+      node_version: "20"
+      nx_targets: "lint test build"
+      prisma: true
+      env_file: "DATABASE_URL=postgresql://user:pass@localhost:5432/dummy"
+    secrets: inherit
+
+  docker:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    needs: ci
+    uses: <owner>/shared-workflows/.github/workflows/docker.yml@main
+    with:
+      images: |
+        [
+          { "name": "api", "dockerfile": "apps/api/Dockerfile" },
+          { "name": "studio", "dockerfile": "apps/studio/Dockerfile" },
+          { "name": "client", "dockerfile": "apps/client/Dockerfile" }
+        ]
+    secrets: inherit
