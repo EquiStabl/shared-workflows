@@ -27,6 +27,10 @@ on:
         description: 'Path to the Playwright HTML report directory'
         type: string
         default: 'dist/.playwright/apps/web-e2e/playwright-report'
+      playwright_image:
+        description: 'Playwright Docker image — MUST match the @playwright/test version in package-lock.json'
+        type: string
+        default: 'mcr.microsoft.com/playwright:v1.58.2-noble'
     secrets:
       NX_CLOUD_ACCESS_TOKEN:
         description: 'Nx Cloud access token for remote caching'
@@ -35,9 +39,12 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    # Run inside the official Playwright image: browsers + OS deps are pre-baked,
+    # so there is no `playwright install` step left to hang/timeout on the runner.
+    container:
+      image: ${{ inputs.playwright_image }}
     env:
-      NODE_OPTIONS: "--max-http-header-size=16384"
-      PW_CLI_USE_NATIVE_UNZIP: "1"
+      NODE_OPTIONS: '--max-http-header-size=16384'
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -51,36 +58,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Ensure native unzip is installed
-        run: sudo apt-get update && sudo apt-get install -y unzip
-
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: playwright-chromium-${{ runner.os }}-
-
-      - name: Install Playwright Chromium Browser
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium
-        timeout-minutes: 5
-
-      - name: Install Playwright system dependencies
-        run: npx playwright install-deps chromium
-        timeout-minutes: 5
-
-      # - name: Install Playwright browsers
-      #   if: steps.playwright-cache.outputs.cache-hit != 'true'
-      #   run: npx playwright install chromium --with-deps
-      #   timeout-minutes: 5
-
-      # - name: Install Playwright system deps
-      #   if: steps.playwright-cache.outputs.cache-hit == 'true'
-      #   run: npx playwright install-deps chromium
-      #   timeout-minutes: 5
 
       - name: Run E2E tests
         run: ${{ inputs.e2e_command }}
