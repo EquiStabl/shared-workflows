@@ -19,6 +19,10 @@ on:
         description: 'Content to write to .env file'
         type: string
         default: ''
+      affected:
+        description: 'Run only on Nx affected projects (vs all projects)'
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -50,7 +54,18 @@ jobs:
         if: inputs.prisma
         run: npx prisma generate
 
-      - name: Run Nx targets
+      - name: Derive Nx SHAs (affected)
+        if: inputs.affected
+        uses: nrwl/nx-set-shas@3e9ad7370203c1e93d109be57f3b72eb0eb511b1 # v4.4.0
+
+      - name: Run Nx targets (affected)
+        if: inputs.affected
+        run: npx nx affected -t ${{ inputs.nx_targets }}
+        env:
+          NX_CLOUD_ACCESS_TOKEN: ${{ secrets.NX_CLOUD_ACCESS_TOKEN }}
+
+      - name: Run Nx targets (all)
+        if: ${{ !inputs.affected }}
         run: npx nx run-many -t ${{ inputs.nx_targets }}
         env:
           NX_CLOUD_ACCESS_TOKEN: ${{ secrets.NX_CLOUD_ACCESS_TOKEN }}
