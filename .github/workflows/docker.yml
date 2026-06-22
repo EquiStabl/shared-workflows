@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read # nx-set-shas reads previous workflow runs to derive the base SHA
     outputs:
       images: ${{ steps.affected.outputs.images || steps.passthrough.outputs.images }}
     steps:
