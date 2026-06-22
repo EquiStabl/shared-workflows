@@ -7,17 +7,78 @@ on:
         description: 'JSON array of images to build, e.g. [{"name":"api","dockerfile":"apps/api/Dockerfile"}]'
         type: string
         required: true
+      affected:
+        description: 'Build only Nx affected images (push to default branch only; releases/dispatch always build all). Image name must match the Nx project name.'
+        type: boolean
+        default: false
+      node_version:
+        description: 'Node.js version (used to compute affected projects)'
+        type: string
+        default: '24'
 
 jobs:
+  # Resolves the list of images to build/deploy. With affected enabled (and only
+  # on a branch push), it filters `images` down to the Nx affected apps; otherwise
+  # it passes the full list through unchanged.
+  resolve:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      images: ${{ steps.affected.outputs.images || steps.passthrough.outputs.images }}
+    steps:
+      - name: Pass through all images
+        id: passthrough
+        if: ${{ !inputs.affected || github.event_name != 'push' }}
+        env:
+          IMAGES: ${{ inputs.images }}
+        run: echo "images=$(jq -c . <<< "$IMAGES")" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: ${{ inputs.affected && github.event_name == 'push' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          filter: tree:0
+          fetch-depth: 0
+
+      - name: Setup Node
+        if: ${{ inputs.affected && github.event_name == 'push' }}
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+
+      - name: Install deps
+        if: ${{ inputs.affected && github.event_name == 'push' }}
+        run: npm ci
+
+      - name: Derive Nx SHAs
+        if: ${{ inputs.affected && github.event_name == 'push' }}
+        uses: nrwl/nx-set-shas@3e9ad7370203c1e93d109be57f3b72eb0eb511b1 # v4.4.0
+
+      - name: Compute affected images
+        id: affected
+        if: ${{ inputs.affected && github.event_name == 'push' }}
+        env:
+          IMAGES: ${{ inputs.images }}
+          NX_CLOUD_ACCESS_TOKEN: ${{ secrets.NX_CLOUD_ACCESS_TOKEN }}
+        run: |
+          APPS=$(npx nx show projects --affected --type app --json)
+          echo "Affected apps: $APPS"
+          FILTERED=$(jq -c --argjson aff "$APPS" '[ .[] | select(.name as $n | $aff | index($n) != null) ]' <<< "$IMAGES")
+          echo "Building images: $FILTERED"
+          echo "images=$FILTERED" >> "$GITHUB_OUTPUT"
+
   build:
-    if: vars.DOCKER_MANUAL_ONLY != 'true' || github.event_name == 'workflow_dispatch'
+    if: ${{ (vars.DOCKER_MANUAL_ONLY != 'true' || github.event_name == 'workflow_dispatch') && needs.resolve.outputs.images != '[]' }}
+    needs: resolve
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        image: ${{ fromJson(inputs.images) }}
+        image: ${{ fromJson(needs.resolve.outputs.images) }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -62,7 +123,7 @@ jobs:
   deploy-dev:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    needs: build
+    needs: [resolve, build]
     steps:
       - name: Checkout GitOps repo
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -77,7 +138,7 @@ jobs:
       - name: Update image tags
         working-directory: gitops/apps/${{ github.event.repository.name }}/overlays/dev
         env:
-          IMAGES: ${{ inputs.images }}
+          IMAGES: ${{ needs.resolve.outputs.images }}
         run: |
           TAG="${GITHUB_REF_NAME}-${GITHUB_RUN_ID}"
           REPO="${GITHUB_REPOSITORY,,}"
@@ -120,7 +181,7 @@ jobs:
   deploy-prod:
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
-    needs: build
+    needs: [resolve, build]
     steps:
       - name: Checkout GitOps repo
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -135,7 +196,7 @@ jobs:
       - name: Update image tags
         working-directory: gitops/apps/${{ github.event.repository.name }}/overlays/prod
         env:
-          IMAGES: ${{ inputs.images }}
+          IMAGES: ${{ needs.resolve.outputs.images }}
         run: |
           VERSION=${GITHUB_REF_NAME#v}
           REPO="${GITHUB_REPOSITORY,,}"
