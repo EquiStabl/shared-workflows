@@ -19,6 +19,10 @@ on:
         description: 'Base branch name shown in the PR comment'
         type: string
         default: 'main'
+      runner:
+        description: 'Runner label (job sans container: — un runner standard suffit). Défaut ubuntu-latest.'
+        type: string
+        default: 'ubuntu-latest'
 
 permissions:
   pull-requests: write
@@ -26,7 +30,7 @@ permissions:
 
 jobs:
   compare:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     steps:
       - name: Download baseline artifact
         uses: actions/download-artifact@v4
