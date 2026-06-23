@@ -31,6 +31,10 @@ on:
         description: 'Playwright Docker image — MUST match the @playwright/test version in package-lock.json'
         type: string
         default: 'mcr.microsoft.com/playwright:v1.58.2-noble'
+      runner:
+        description: 'Runner label. Self-hosted doit être en containerMode kubernetes (job container:). Défaut ubuntu-latest.'
+        type: string
+        default: 'ubuntu-latest'
     secrets:
       NX_CLOUD_ACCESS_TOKEN:
         description: 'Nx Cloud access token for remote caching'
@@ -38,7 +42,7 @@ on:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     # Run inside the official Playwright image: browsers + OS deps are pre-baked,
     # so there is no `playwright install` step left to hang/timeout on the runner.
     container:
