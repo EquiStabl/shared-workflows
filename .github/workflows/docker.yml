@@ -33,7 +33,7 @@ jobs:
   # on a branch push), it filters `images` down to the Nx affected apps; otherwise
   # it passes the full list through unchanged.
   resolve:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
       actions: read # nx-set-shas reads previous workflow runs to derive the base SHA
@@ -149,7 +149,7 @@ jobs:
           cache-to: ${{ inputs.remote_buildkit && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache,mode=max', env.REPO, matrix.image.name) || 'type=gha,mode=max' }}
 
   deploy-dev:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     if: github.ref == 'refs/heads/main'
     needs: [resolve, build]
     steps:
@@ -207,7 +207,7 @@ jobs:
             }
 
   deploy-prod:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     if: github.event_name == 'release'
     needs: [resolve, build]
     steps:
