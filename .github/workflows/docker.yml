@@ -148,8 +148,8 @@ jobs:
           # (persistant sur PVC) -> pas de cache registre. L'export mode=max vers
           # ghcr via WAN coûtait ~18 min/build, bien plus que le bénéfice.
           # Sinon (ubuntu-latest) : cache GHA classique.
-          cache-from: ${{ inputs.remote_buildkit && '' || 'type=gha' }}
-          cache-to: ${{ inputs.remote_buildkit && '' || 'type=gha,mode=max' }}
+          cache-from: ${{ !inputs.remote_buildkit && 'type=gha' || '' }}
+          cache-to: ${{ !inputs.remote_buildkit && 'type=gha,mode=max' || '' }}
 
   deploy-dev:
     runs-on: ${{ inputs.runner }}
